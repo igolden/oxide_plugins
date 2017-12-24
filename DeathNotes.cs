@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Oxide.Core;
 using Oxide.Core.Plugins;
@@ -411,7 +412,9 @@ namespace Oxide.Plugins
 
             // duplicate functionality of the Attacker
             // TryGetName() function.
-            // --> checks the type of the 
+            // --> checks the type of the entity and
+            // uses that for conditional responses
+            // --> only player, zombie, heli, animal
             public string TryGetName()
             {
                 if (type == VictimType.Player)
@@ -441,6 +444,8 @@ namespace Oxide.Plugins
                 return "No Victim";
             }
 
+            // VictimType
+            //  class to define the meta for VictimTypes
             public VictimType TryGetType()
             {
                 if (entity == null)
@@ -458,19 +463,31 @@ namespace Oxide.Plugins
             }
         }
 
+        // DeathData
+        //  Core class for holding and managing
+        //  the death data between victims and attackers.
+        //  After defining all of the core classes above,
+        //  Victim, Attacker, etc - this class glues them
+        //  together for use.
         class DeathData
         {
+          // read code/comments above for definitions
+          // of these custom classes
             public Victim victim = new Victim();
             public Attacker attacker = new Attacker();
             public DeathReason reason = DeathReason.Unknown;
             public string damageType = string.Empty;
             public string weapon = string.Empty;
+            // also includes attachments on the weapon, niice.
             public List<string> attachments = new List<string>();
             public string bodypart = string.Empty;
             internal float _distance = -1f;
 
+            // calculate the distance between the players so that
+            // we can say "shot bow from 100m away"
             public float distance
             {
+              // using get/try to handle errors gracefully.
                 get
                 {
                     try
@@ -493,6 +510,9 @@ namespace Oxide.Plugins
                 }
             }
 
+            // Handles all possible deathreasons. 
+            // --> this is where we could add additional
+            // death reason functionality
             public DeathReason TryGetReason()
             {
                 if (victim.type == VictimType.Helicopter)
@@ -523,6 +543,8 @@ namespace Oxide.Plugins
                 return DeathReason.Unknown;
             }
 
+            // GetDeathReason function which gets the DeathReason
+            // using the above TryGetReason
             public DeathReason GetDeathReason(string damage)
             {
                 List<DeathReason> Reason = (from DeathReason current in Enum.GetValues(typeof(DeathReason)) where current.ToString() == damage select current).ToList();
@@ -533,20 +555,30 @@ namespace Oxide.Plugins
                 return Reason[0];
             }
 
+            // drops the JsonIgnore attribute on the following internal
             [JsonIgnore]
             internal string JSON => JsonConvert.SerializeObject(this, Formatting.Indented);
 
+            // internal Get method for DeathData object
             internal static DeathData Get(object obj)
             {
+              // A lot of this internal data is just rerepresnetation
+              // of the above custom classes.
+              // Going to drop simple comments, but just read the code,
+              // it's all in a json object.
+
+              // setup json object structure
                 JObject jobj = (JObject)obj;
                 DeathData data = new DeathData();
 
+                // bodypart, weapon, weapon attachment, distance.
                 data.bodypart = jobj["bodypart"].ToString();
                 data.weapon = jobj["weapon"].ToString();
                 data.attachments = (from attachment in jobj["attachments"] select attachment.ToString()).ToList();
                 data._distance = Convert.ToSingle(jobj["distance"]);
 
                 /// Victim
+                // Get victims name... breh
                 data.victim.name = jobj["victim"]["name"].ToString();
 
                 List<VictimType> victypes = (from VictimType current in Enum.GetValues(typeof(VictimType)) where current.GetHashCode().ToString() == jobj["victim"]["type"].ToString() select current).ToList();
@@ -557,6 +589,10 @@ namespace Oxide.Plugins
                 /// Attacker
                 data.attacker.name = jobj["attacker"]["name"].ToString();
 
+                // storing the attacker types as a list due to the way it's defined 
+                // above. Most likely using the list to say List[0].exist? and conditionally
+                // respond. (.exist? is ruby/pseudocode, NOT valid)
+      
                 List<AttackerType> attackertypes = (from AttackerType current in Enum.GetValues(typeof(AttackerType)) where current.GetHashCode().ToString() == jobj["attacker"]["type"].ToString() select current).ToList();
 
                 if (attackertypes.Count != 0)
@@ -574,6 +610,11 @@ namespace Oxide.Plugins
         #endregion
 
         #region Enums / Types
+
+
+        // Enums provide a convenient way to defined classes
+        // that represent a singular Type. Well written code,
+        // and this is where those enums are defined.
 
         enum VictimType
         {
@@ -633,6 +674,11 @@ namespace Oxide.Plugins
 
         #region Player Settings
 
+        // => is a lambda in csharp. Just writing this so I remember.
+        // ruby/go guy, lol
+
+        // pretty sure PlayerSettings is defined in oxide, but can checkout another time
+        //
         List<string> playerSettingFields => (from field in typeof(PlayerSettings).GetFields() select field.Name).ToList();
 
         List<string> GetSettingValues(BasePlayer player) => (from field in typeof(PlayerSettings).GetFields() select $"{field.Name} : {field.GetValue(playerSettings[player.userID]).ToString().ToLower()}").ToList();
@@ -650,8 +696,10 @@ namespace Oxide.Plugins
 
         #region General Plugin Hooks
 
+        // more general setup functionaliy for loading the plugin in Oxide
         void Loaded()
         {
+          // handles new Oxide multi-game functionality
 #if !RUST
             throw new NotSupportedException("This plugin or the version of this plugin does not support this game!");
 #endif
@@ -668,25 +716,32 @@ namespace Oxide.Plugins
             LoadData();
             LoadMessages();
 
+            // loop over every playerin the server, via BasePlayer.activePlayerList
             foreach (BasePlayer player in BasePlayer.activePlayerList)
                 if (!playerSettings.ContainsKey(player.userID))
                 {
+                  // add additional player settings to each player in the server.
                     playerSettings.Add(player.userID, new PlayerSettings(this));
 
                     SaveData();
                 }
 
+            // Hook into the PopupNotifications plugin. Define as var.
             PopupNotifications = (Plugin)plugins.Find("PopupNotifications");
 
+            // throw err if dependency is not installed
             if (PopupNotifications == null && UsePopupNotifications)
                 PrintWarning("You have set 'Use Popup Notifications' to true, but the Popup Notifications plugin is not installed. Popups will not work without it. Get it here: http://oxidemod.org/plugins/1252/");
         }
 
         protected override void LoadDefaultConfig()
         {
+          // if no config, generate..
             PrintWarning("Generating new config file...");
         }
 
+        // when a new player joins the server, add the needed settings
+        // to the player settings.
         void OnPlayerInit(BasePlayer player)
         {
             if (!playerSettings.ContainsKey(player.userID))
@@ -698,6 +753,8 @@ namespace Oxide.Plugins
 
         void OnPluginLoaded(object plugin)
         {
+          // when this plugin loads, make sure the PopupNotifications plugin
+          // is loaded and defined as such.
             if (plugin is Plugin && ((Plugin)plugin).Title == "Popup Notifications")
                 PopupNotifications = (Plugin)plugin;
         }
@@ -708,32 +765,42 @@ namespace Oxide.Plugins
 
         void LoadData()
         {
+          // --> I did not add the comment below
             //canRead = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, bool>>("DeathNotes");
 
+          // get the Oxide player settings, and read the DeathNotes/PlayerSettings object
             playerSettings = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, PlayerSettings>>("DeathNotes/PlayerSettings");
 
+            // if killReproducing is enabled, handled
             if (killReproducing)
                 reproduceableKills = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<string, string>>("DeathNotes/KillReproducing");
         }
 
         void SaveData()
         {
+          // --> I did not add the comment below
             //Interface.Oxide.DataFileSystem.WriteObject("DeathNotes", canRead);
 
+          // save data to the playersettings DeathNotes/Playersettings node
             Interface.Oxide.DataFileSystem.WriteObject("DeathNotes/PlayerSettings", playerSettings);
 
             if (killReproducing)
                 Interface.Oxide.DataFileSystem.WriteObject("DeathNotes_KillReproducing", reproduceableKills);
         }
 
+        // LoadConfig handles loading all of the necessary config
+        // for getting plugin up and runninng within the rust server and
+        // the steam engine.
         void LoadConfig()
         {
+          // define chat icon (rust DeathNotes)
             SetConfig("Settings", "Chat Icon (SteamID)", "76561198077847390");
 
+            // default message radius disabled (global deahtnotes)
             SetConfig("Settings", "Message Radius Enabled", false);
             SetConfig("Settings", "Message Radius", 300f);
 
-            SetConfig("Settings", "Log to File", false);
+            // handles the writing/UI defaults SetConfig("Settings", "Log to File", false);
             SetConfig("Settings", "Write to Console", true);
             SetConfig("Settings", "Write to Chat", true);
             SetConfig("Settings", "Use Popup Notifications", false);
@@ -748,8 +815,10 @@ namespace Oxide.Plugins
 
             SetConfig("Settings", "Simple UI Hide Timer", 5f);
 
+            // need permissions? default false
             SetConfig("Settings", "Needs Permission", false);
 
+            // title, format, console
             SetConfig("Settings", "Title", "Death Notes");
             SetConfig("Settings", "Formatting", "[{Title}]: {Message}");
             SetConfig("Settings", "Console Formatting", "{Message}");
@@ -757,6 +826,7 @@ namespace Oxide.Plugins
             SetConfig("Settings", "Attachments Split", " | ");
             SetConfig("Settings", "Attachments Formatting", " ({attachments})");
 
+            // default styling
             SetConfig("Settings", "Title Color", "#80D000");
             SetConfig("Settings", "Victim Color", "#C4FF00");
             SetConfig("Settings", "Attacker Color", "#C4FF00");
@@ -767,11 +837,13 @@ namespace Oxide.Plugins
             SetConfig("Settings", "Message Color", "#696969");
             SetConfig("Settings", "Health Color", "#C4FF00");
 
+            // empty dictionaries for custom classes
             SetConfig("Names", new Dictionary<string, object> { });
             SetConfig("Bodyparts", new Dictionary<string, object> { });
             SetConfig("Weapons", new Dictionary<string, object> { });
             SetConfig("Attachments", new Dictionary<string, object> { });
 
+            // define all of the possible death displays
             SetConfig("Messages", "Bleeding", new List<object> { "{victim} bled out." });
             SetConfig("Messages", "Blunt", new List<object> { "{attacker} used a {weapon} to knock {victim} out." });
             SetConfig("Messages", "Bullet", new List<object> { "{victim} was shot in the {bodypart} by {attacker} with a {weapon}{attachments} from {distance}m." });
@@ -811,9 +883,14 @@ namespace Oxide.Plugins
             SetConfig("Messages", "Stab Sleeping", new List<object> { "{victim} was stabbed to death by {attacker} using a {weapon} before he could even awake." });
             SetConfig("Messages", "Unknown Sleeping", new List<object> { "{victim} was sleeping when he died. Nobody knows why, it just happened." });
 
+            // save the config
             SaveConfig();
 
             //  Cache Config Variables
+            //
+            //  The following variables are set based on using the set/get
+            //  and GETing the config. All they do is take the above data
+            //  we set with SetConfig and sets them to vars
             ChatIcon = GetConfig("76561198077847390", "Settings", "Chat Icon (SteamID)");
 
             MessageRadiusEnabled = GetConfig(false, "Settings", "Message Radius Enabled");
@@ -857,6 +934,8 @@ namespace Oxide.Plugins
             Weapons = GetConfig(new Dictionary<string, object> { }, "Weapons");
             Attachments = GetConfig(new Dictionary<string, object> { }, "Attachments");
 
+            // defines all of the messages to display when a particular
+            // death happens
             Messages = GetConfig(new Dictionary<string, object>
             {
                 //  Normal
@@ -902,6 +981,7 @@ namespace Oxide.Plugins
             }, "Messages").ToDictionary(l => l.Key, l => ((List<object>)l.Value).ConvertAll(m => m.ToString()));
         }
 
+        // load messages based on permissions, default all
         void LoadMessages()
         {
             lang.RegisterMessages(new Dictionary<string, string>
@@ -919,6 +999,9 @@ namespace Oxide.Plugins
 
         #region Commands
 
+        
+        // custom chat commands to interact with player deaths and death notes.
+        // some may require server admin status (unsure while writing this.)
         [ChatCommand("deaths")]
         void cmdDeaths(BasePlayer player, string cmd, string[] args)
         {
@@ -936,17 +1019,21 @@ namespace Oxide.Plugins
                 return;
             }
 
+            // take first argument, lowercase and pass into 
+            // case statements
             switch (args[0].ToLower())
             {
                 case "set":
                     if (args.Length != 3)
                     {
+                      // bad command
                         SendChatMessage(player, "Syntax: /deaths set <field> <value>");
                         return;
                     }
 
                     if (!playerSettingFields.Contains(args[1].ToLower()))
                     {
+                      // bad field
                         SendChatMessage(player, GetMsg("Field Not Found", player.userID));
                         return;
                     }
@@ -959,6 +1046,7 @@ namespace Oxide.Plugins
                     }
                     catch (FormatException)
                     {
+                      // return err
                         SendChatMessage(player, GetMsg("True Or False", player.userID).Replace("{arg}", "<value>"));
                         return;
                     }
@@ -978,6 +1066,8 @@ namespace Oxide.Plugins
             }
         }
 
+        // info for ChatCommand
+        // ChatCommand is an Oxide attribute
         [ChatCommand("deathnotes")]
         void cmdGetInfo(BasePlayer player) => GetInfo(player);
 
@@ -1027,6 +1117,8 @@ namespace Oxide.Plugins
 
         void GetInfo(BasePlayer player)
         {
+          // gets the plugin on demand?
+          // UNKNOWN
             webrequest.EnqueueGet("http://oxidemod.org/plugins/819/", (code, response) => {
                 if (code != 200)
                 {
@@ -1034,9 +1126,11 @@ namespace Oxide.Plugins
                     return;
                 }
 
+                // version set
                 string version_published = "0.0.0";
                 string version_installed = this.Version.ToString();
 
+                // make sure the correct version is running
                 Match version = new Regex(@"<h3>Version (\d{1,2}(\.\d{1,2})+?)<\/h3>").Match(response);
                 if (version.Success)
                 {
@@ -1051,6 +1145,8 @@ namespace Oxide.Plugins
 
         #region Death Related
 
+        // get informatino on the Hit collision
+        // @param uid, info
         HitInfo TryGetLastWounded(ulong uid, HitInfo info)
         {
             if (LastWounded.ContainsKey(uid))
@@ -1063,6 +1159,7 @@ namespace Oxide.Plugins
             return info;
         }
 
+        // Oxide hook for when the entity takes damage
         void OnEntityTakeDamage(BaseCombatEntity victim, HitInfo info)
         {
             if (victim?.ToPlayer() != null && info?.Initiator?.ToPlayer() != null)
@@ -1075,6 +1172,8 @@ namespace Oxide.Plugins
             }
         }
 
+        // when an Entity dies
+        // Oxide lifcycle hook
         void OnEntityDeath(BaseCombatEntity victim, HitInfo info)
         {
             if (victim == null)
@@ -1144,17 +1243,23 @@ namespace Oxide.Plugins
             NoticeDeath(data);
         }
 
+        // NoticeDeath takes the DeathData class as an arg
+        // so this essentially encapsulates DeathData into an event.
         void NoticeDeath(DeathData data, bool reproduced = false)
         {
+            // new Data == UpdateData(DeathData data)
             DeathData newData = UpdateData(data);
 
             if (string.IsNullOrEmpty(GetDeathMessage(newData, false)))
                 return;
 
+            // loop over all active players
             foreach (BasePlayer player in BasePlayer.activePlayerList)
             {
+              // check if in radius
                 if (InRadius(player, data.attacker.entity))
                 {
+                  // if permissions allow them to see
                     if (CanSee(player, "chat"))
                         SendChatMessage(player, GetDeathMessage(newData, false), null, ChatIcon);
 
@@ -1163,6 +1268,8 @@ namespace Oxide.Plugins
                 }
             }
 
+            // depending on the settings for where we are outputting these args
+            // write them to their respective locations
             if (WriteToConsole)
                 Puts(StripTags(GetDeathMessage(newData, true)));
 
@@ -1189,8 +1296,12 @@ namespace Oxide.Plugins
 
         #region Formatting
 
+        // If the Victim is killed by a thrown weapon, format the name
+        // for chat output
         string FormatThrownWeapon(string unformatted)
         {
+          // if doesn't match, return empty string
+          // --> think dying of cold 
             if (unformatted == string.Empty)
                 return string.Empty;
 
@@ -1220,6 +1331,11 @@ namespace Oxide.Plugins
             return formatted;
         }
 
+        
+        // removes the tags from output; ie: <color><format> etc
+        // I dont know these tags off top, but just do a find
+        // and search for StripTags and you'll see its a 
+        // string santizer for the chat.
         string StripTags(string original)
         {
             if (original == null || original == string.Empty)
@@ -1234,6 +1350,11 @@ namespace Oxide.Plugins
             return original;
         }
 
+        // makes the first letter of a string Uppercase
+        // this is literally just a caplitize function and is
+        // super common. I wonder if UnityEngine has a method
+        // for this function?
+        //
         string FirstUpper(string original)
         {
             if (original == string.Empty)
@@ -1250,8 +1371,10 @@ namespace Oxide.Plugins
 
         #region Death Variables Methods
 
+        // if messages contains the death reason, then add it to the death reson.
         List<string> GetMessages(string reason) => Messages.ContainsKey(reason) ? Messages[reason] : new List<string>();
 
+        // get the attachments from the weapon
         List<string> GetAttachments(HitInfo info)
         {
             List<string> attachments = new List<string>();
@@ -1267,8 +1390,13 @@ namespace Oxide.Plugins
             return attachments;
         }
 
+        // Take the skelton from the Victim, and find the bone that was hit.
+        // If you're unfamiliar with bones/skeletons/meshes etc when rigging
+        // a character, this just references the default skeleton used in
+        // Unity and rigging in general.
         string GetBoneName(BaseCombatEntity entity, uint boneId) => entity?.skeletonProperties?.FindBone(boneId)?.name?.english ?? "Body";
 
+        // is the active player in radius for the messaging radius?
         bool InRadius(BasePlayer player, BaseCombatEntity attacker)
         {
             if (MessageRadiusEnabled)
@@ -1289,6 +1417,12 @@ namespace Oxide.Plugins
             return true;
         }
 
+        // get the death messages
+        // --> this is just a common GET 
+        // method for grabbing the DeathData and outputting
+        // it to the configured locations
+        // @param data {DeathData}
+        // @param console {bool}
         string GetDeathMessage(DeathData data, bool console)
         {
             string message = string.Empty;
@@ -1318,6 +1452,7 @@ namespace Oxide.Plugins
 
             string attachmentsString = data.attachments.Count == 0 ? string.Empty : AttachmentFormatting.Replace("{attachments}", ListToString(data.attachments, 0, AttachmentSplit));
 
+            // outputs to chat/console, and handles the deafult formatting
             if (console)
                 message = ConsoleFormatting.Replace("{Title}", $"<color={TitleColor}>{ChatTitle}</color>").Replace("{Message}", $"<color={MessageColor}>{messages.GetRandom()}</color>");
             else
@@ -1334,10 +1469,12 @@ namespace Oxide.Plugins
             return message;
         }
 
+        // Updates the DeathData on demand
         DeathData UpdateData(DeathData data)
         {
             bool configUpdated = false;
 
+            // conditional error handling for VictimType
             if (data.victim.type != VictimType.Player)
             {
                 if (Config.Get("Names", data.victim.name) == null)
@@ -1349,6 +1486,7 @@ namespace Oxide.Plugins
                     data.victim.name = GetConfig(data.victim.name, "Names", data.victim.name);
             }
 
+            // conditional error handling for AttackerType
             if (data.attacker.type != AttackerType.Player)
             {
                 if (Config.Get("Names", data.attacker.name) == null)
@@ -1360,6 +1498,7 @@ namespace Oxide.Plugins
                     data.attacker.name = GetConfig(data.attacker.name, "Names", data.attacker.name);
             }
 
+            // conditionally handle the hitlocation for Body parts
             if (Config.Get("Bodyparts", data.bodypart) == null)
             {
                 SetConfig("Bodyparts", data.bodypart, data.bodypart);
@@ -1399,6 +1538,8 @@ namespace Oxide.Plugins
             return data;
         }
 
+        // conditionally handle whether the active player
+        // can see messages based on config, radius, etc
         bool CanSee(BasePlayer player, string type)
         {
             if (!NeedsPermission)
@@ -1448,6 +1589,7 @@ namespace Oxide.Plugins
 
         #region Config and Message Handling
 
+        // Oxide hook for setting the config
         void SetConfig(params object[] args)
         {
             List<string> stringArgs = (from arg in args select arg.ToString()).ToList<string>();
@@ -1456,6 +1598,7 @@ namespace Oxide.Plugins
             if (Config.Get(stringArgs.ToArray()) == null) Config.Set(args);
         }
 
+        //  Oxide hook for GETing the config
         T GetConfig<T>(T defaultVal, params object[] args)
         {
             List<string> stringArgs = (from arg in args select arg.ToString()).ToList<string>();
@@ -1477,6 +1620,7 @@ namespace Oxide.Plugins
 
         #region Permission Handling
 
+        // handle permissions in Oxide
         void RegisterPerm(params string[] permArray)
         {
             string perm = ListToString(permArray.ToList(), 0, ".");
@@ -1504,13 +1648,17 @@ namespace Oxide.Plugins
 
         #region Messages
 
+        // The actual utility that send messages to the chat when an event happens
+        // core Oxide class
         void SendChatMessage(BasePlayer player, string msg, string prefix = null, object uid = null)
         {
             rust.SendChatMessage(player, prefix == null ? msg : msg, "<color=#C4FF00>" + prefix + "</color>", uid?.ToString() ?? "0");
         }
 
+        // PopupMessages from PopupNotifications
         void PopupMessage(string message) => PopupNotifications?.Call("CreatePopupNotification", message);
 
+        // core Oxide class for UIMessages
         void UIMessage(BasePlayer player, string message)
         {
             bool replaced = false;
