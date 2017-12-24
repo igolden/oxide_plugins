@@ -1,3 +1,13 @@
+/*
+  Kits plugin
+    - this is just a file for me to add
+      additional comments to. This is just
+      my first step of handling a refactor
+      or understanding new code.
+    - All credit to the original plugin author
+    - All credit for the code Oxide classes
+      go to the original Oxide dev team
+*/
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,50 +31,75 @@ namespace Oxide.Plugins
         [PluginReference]
         Plugin CopyPaste, ImageLibrary, EventManager;
 
+        // plugin has been loaded
         void Loaded()
         {
             LoadData();
             try
             {
+              // interface with Oxide to read the original Kits_Data files
                 kitsData = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, Dictionary<string, KitData>>>("Kits_Data");
             }
+            // if fails, catch
             catch
             {
+              // when it fails, it intializes an empty dictionary as KitData
                 kitsData = new Dictionary<ulong, Dictionary<string, KitData>>();
             }
+            // regiser the messages into lang
+            // --> lang must belong to the oxide core
             lang.RegisterMessages(messages, this);
         }
 
+        // once server has started do...
         void OnServerInitialized()
         {
+          // set perms
             InitializePermissions();
+            // if string exists
             if (!string.IsNullOrEmpty(BackgroundURL))
+                // if ImageLibrary classes instantiates
+                // and exists
                 if (ImageLibrary)
                     AddImage(BackgroundURL, "Background", (ulong)ResourceId);
+            // loop over all active players
             foreach (var player in BasePlayer.activePlayerList)
+              // call the onplayer init for each player
                 OnPlayerInit(player);
         }
 
         void OnPlayerInit(BasePlayer player)
         {
+          // binds the keys to each player when they init
             BindKeys(player);
         }
 
+        // sets up the intial permissions for a user
         void InitializePermissions()
         {
+          // only has admin and ConsoleGive permissions
             permission.RegisterPermission(this.Title + ".admin", this);
             permission.RegisterPermission(this.Title + ".ConsoleGive", this);
+            // for each kit that's store in the Kits.Values dictionary, loop
             foreach (var kit in storedData.Kits.Values)
             {
+              // as long as the kit/permssions checks out
+              // AND as long as the permission exists, do...
                 if (!string.IsNullOrEmpty(kit.permission) && !permission.PermissionExists(kit.permission))
+                  // register the persmission
                     permission.RegisterPermission(kit.permission, this);
+                // if the image library exists
                 if (ImageLibrary)
+                  // user this image from imgur for the kit
                     AddImage(kit.image ?? "http://i.imgur.com/xxQnE1R.png", kit.name.Replace(" ", ""), (ulong)ResourceId);
             }
         }
 
+        // Bind Keys function
+        // called on player init
         void BindKeys(BasePlayer player, bool unbind = false)
         {
+
             if (string.IsNullOrEmpty(UIKeyBinding)) return;
             if (unbind)
                 player.Command($"bind {UIKeyBinding} \"\"");
@@ -76,40 +111,66 @@ namespace Oxide.Plugins
         ///// Configuration
         //////////////////////////////////////////////////////////////////////////////////////////
 
+        // declaring various values
         Dictionary<ulong, GUIKit> GUIKits;
         List<string> CopyPasteParameters = new List<string>();
         string BackgroundURL;
         string UIKeyBinding;
         bool KitLogging;
+        // should we show unavailable kits?
         bool ShowUnavailableKits;
         public Dictionary<int, string> AutoKits = new Dictionary<int, string>();
 
+        // GUIKit just holds a description and the
+        // list of available kits
         class GUIKit
         {
             public string description = string.Empty;
             public List<string> kits = new List<string>();
         }
 
+        // loads the default configs
         protected override void LoadDefaultConfig() { }
 
+        // initialize the plugin
         void Init()
         {
             var config = Config.ReadObject<Dictionary<string, object>>();
+            // if npc gui kits missing
             if (!config.ContainsKey("NPC - GUI Kits"))
             {
+              // set example gui kits
                 config["NPC - GUI Kits"] = GetExampleGUIKits();
                 Config.WriteObject(config);
             }
+            // if copy/paste params missing
             if (!config.ContainsKey("CopyPaste - Parameters"))
             {
+              // set default copy/paste params
                 config["CopyPaste - Parameters"] = new List<string> { "deployables", "true", "inventories", "true" };
                 Config.WriteObject(config);
             }
+            // if custom autokits missing
             if (!config.ContainsKey("Custom AutoKits"))
             {
+              // set default custom autokits
                 config["Custom AutoKits"] = new Dictionary<int, string> {{0, "KitName" },{1, "KitName" },{2, "KitName" }};
                 Config.WriteObject(config);
             }
+
+            // the following functions just check if something exists
+            // in the config, and if NOT, set the defaults
+            // so they're not missing.
+            //
+            // I'm 160 lines and and I see that developer favors
+            // the !condition syntax, so I assume this is a
+            // flavor of his error handling for config.
+            //
+            // If these classes were blank or missing I assume
+            // the plugin would fail in some aspect.
+
+
+            // continuing/skipping based on above.
             if (!config.ContainsKey("UI KeyBinding"))
             {
                 config["UI KeyBinding"] = string.Empty;
@@ -130,16 +191,22 @@ namespace Oxide.Plugins
                 config["Background - URL"] = string.Empty;
                 Config.WriteObject(config);
             }
+            // config.keys, converted to an array
             var keys = config.Keys.ToArray();
             if (keys.Length > 1)
             {
+              // loop over the array if the array isn't empty
                 foreach (var key in keys)
                 {
+                  // if the keys doesn't match one of the allowed keys, remove the key
                     if (!key.Equals("NPC - GUI Kits") && !key.Equals("CopyPaste - Parameters") && !key.Equals("Custom AutoKits") && !key.Equals("UI KeyBinding") && !key.Equals("Background - URL") && !key.Equals("Kit - Logging") && !key.Equals("Show All Kits"))
+                      // remove
                         config.Remove(key);
                 }
+                // write the config
                 Config.WriteObject(config);
             }
+            // deserialize the json params into vars
             CopyPasteParameters = JsonConvert.DeserializeObject<List<string>>(JsonConvert.SerializeObject(config["CopyPaste - Parameters"]));
             GUIKits = JsonConvert.DeserializeObject<Dictionary<ulong, GUIKit>>(JsonConvert.SerializeObject(config["NPC - GUI Kits"]));
             AutoKits = JsonConvert.DeserializeObject<Dictionary<int, string>>(JsonConvert.SerializeObject(config["Custom AutoKits"]));
@@ -149,6 +216,7 @@ namespace Oxide.Plugins
             ShowUnavailableKits = JsonConvert.DeserializeObject<bool>(JsonConvert.SerializeObject(config["Show All Kits"]));
         }
 
+        // set the example kits and the messages that accompany them
         static Dictionary<ulong, GUIKit> GetExampleGUIKits()
         {
             return new Dictionary<ulong, GUIKit>
@@ -177,8 +245,11 @@ namespace Oxide.Plugins
             };
         }
 
+        // when a player respawns, handle the various setup
         void OnPlayerRespawned(BasePlayer player)
         {
+          // can a user redeem the kit?
+          // this is an Oxide.CallHook function
             var thereturn = Interface.Oxide.CallHook("canRedeemKit", player);
             if (thereturn == null)
             {
@@ -205,6 +276,7 @@ namespace Oxide.Plugins
         ///// Language
         //////////////////////////////////////////////////////////////////////////////////////////
 
+        // sets the universal language for that plugin
         string GetMsg(string key, object steamid = null) { return lang.GetMessage(key, this, steamid == null ? null : steamid.ToString()); }
 
         Dictionary<string, string> messages = new Dictionary<string, string>()
@@ -245,9 +317,24 @@ namespace Oxide.Plugins
         ///// Kit Creator
         //////////////////////////////////////////////////////////////////////////////////////////
 
+        // allows users to create a kit on the fly?
+        // I haven't actually used this plugin as an admin yet,
+        // just as a player
         static List<KitItem> GetPlayerItems(BasePlayer player)
         {
+          // start with an empty kit
             List<KitItem> kititems = new List<KitItem>();
+            // the following three loops will loop over all of the inventory 
+            // that the user currently has.
+            //
+            // For all of the items that the user is wearing, add
+            // that information to the "wear" section of the kit
+            //
+            // for all the items that the user has in the inventory
+            // add that to the "Main" section
+            //
+            // for all the items that the user has in their belt
+            // add that to the "Belt" section
             foreach (Item item in player.inventory.containerWear.itemList)
             {
                 if (item != null)
@@ -272,10 +359,22 @@ namespace Oxide.Plugins
                     kititems.Add(iteminfo);
                 }
             }
+            // then just return all of the kit items
             return kititems;
         }
+        // ProcessItem
+        //  returns type KitItem
         static private KitItem ProcessItem(Item item, string container)
         {
+          // various meta for the item, which is helpful to 
+          // understand how the plugin works.
+          // - item
+          // - amount (quantity)
+          // - mods
+          // - container (holds all kititems)
+          // - skin
+          // - itemid (in rust, i assume)
+          // - weapon (is weapon?)
             KitItem iItem = new KitItem();
             iItem.amount = item.amount;
             iItem.mods = new List<int>();
@@ -284,6 +383,11 @@ namespace Oxide.Plugins
             iItem.itemid = item.info.itemid;
             iItem.weapon = false;
 
+            // additional conditional handling for if the item is 
+            // a weapon
+            // get the weapon that the user is holding
+            // and determine if there are any mods on the weapon.
+            // if so, add both the weapons and the mods to the it.
             if (item.info.category.ToString() == "Weapon")
             {
                 BaseProjectile weapon = item.GetHeldEntity() as BaseProjectile;
@@ -308,24 +412,35 @@ namespace Oxide.Plugins
         ///// Kit Redeemer
         //////////////////////////////////////////////////////////////////////////////////////////
 
+        // handles the redemeption of a kit.
+
         void TryGiveKit(BasePlayer player, string kitname)
         {
+          // call the CanRedeemKit to set bool perms as string
             var success = CanRedeemKit(player, kitname) as string;
             if (success != null)
             {
+              // display onscreen or in cui
                 OnScreen(player, success);
                 return;
             }
+            // check whether to give the kit
             success = GiveKit(player, kitname) as string;
+            // if successful, render response on screen
             if (success != null)
             {
                 OnScreen(player, success);
                 return;
             }
+            // additional screen handling for success
             OnScreen(player, GetMsg("KitRedeemed",player.userID));
             Interface.CallHook("OnKitRedeemed", player, kitname);
             proccessKitGiven(player, kitname);
         }
+
+
+
+        // process the kit that was just given to a user
         void proccessKitGiven(BasePlayer player, string kitname)
         {
             if (string.IsNullOrEmpty(kitname)) return;
@@ -343,8 +458,10 @@ namespace Oxide.Plugins
                 RefreshKitPanel(player, PlayerGUI[player.userID].guiid, PlayerGUI[player.userID].page);
         }
 
+        // private method for giving the kit to the BasePlayer
         private object GiveKit(BasePlayer player, string kitname)
         {
+          // if kits empty, return empty  kit
             if (string.IsNullOrEmpty(kitname)) return GetMsg("Emptykitname", player.userID);
             kitname = kitname.ToLower();
             Kit kit;
